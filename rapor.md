@@ -92,3 +92,34 @@
 ### Kısa Değerlendirme
 - **Budama kazanımı:** Derinlik 6'da $\alpha$-$\beta$ budaması, Minimax'e kıyasla ziyaret edilen düğüm sayısını tüm konumlarda **%98,5 ile %99,78** arasında azaltmıştır.
 - **Hamle sıralamasının etkisi:** `P3` konumunda kazan
+
+---
+
+## Aşama 3 — Sezgisel Değerlendirme Fonksiyonu (`evaluate.py`)
+
+### Tasarım Özeti
+- **Pencere Tabanlı Puanlama (`_iter_windows`, `score_window`):** Tahtadaki tüm $K=5$ uzunluğundaki dikey, yatay ve çapraz pencereler ($V=1$ silindir kenar sarma dahil) taranır. Hem MAX hem MIN taşı içeren kilitli pencereler `0` puan alır; tek oyuncuya ait pencereler taş sayısına göre artan ağırlıklarla (`1: 1.0`, `2: 5.0`, `3: 25.0`, `4: 150.0`) puanlanır.
+- **Merkez Kontrolü (`center_control_score`):** Merkez sütuna yakın taşlara küçük pozisyonel bonus eklenir.
+- **Normalizasyon ve Sınır Garantisi (`evaluate`):** Terminal durumlarda kesin fayda (`-1.0`, `0.0`, `+1.0`) döndürülür. Terminal olmayan durumlarda toplam ham skor `0.95 * tanh(raw_score / 250.0)` ile `(-0.95, +0.95)` aralığına sıkıştırılarak terminal değerlerin asla aşılmaması garanti edilir.
+- **Birim Testleri (`tests/test_evaluate.py`):** Boş tahta sıfır kontrolü, sınır garantisi, MAX/MIN simetrisi, silindir sarma tehdidi ve terminal doğrulama dahil **5 birim testi** başarıyla (`OK`) geçmiştir.
+
+### `zero_eval` vs. `evaluate` Konum Karşılaştırması ($d=4$, `heuristic` sıralama)
+
+| Konum | `zero_eval` Hamle / Skor / Düğüm | `evaluate` Hamle / Skor / Düğüm |
+| :--- | :---: | :---: |
+| **P1** | `3` / `+0.000` / `172` | `2` / `-0.004` / `293` |
+| **P2** | `3` / `+0.000` / `171` | `2` / `+0.000` / `192` |
+| **P3** | `0` / `+1.000` / `91` | `0` / `+1.000` / `85` |
+| **P4** | `1` / `+0.000` / `125` | `1` / `-0.068` / `142` |
+| **P5** | `4` / `+1.000` / `89` | `4` / `+1.000` / `97` |
+
+### Karşılıklı Maç Testi ($d=4$, `AlphaBetaSearcher`)
+
+| Eşleşme | Sonuç (MAX Açısından) | Toplam Hamle |
+| :--- | :---: | :---: |
+| **Eval (MAX) vs. Zero (MIN)** | `+1` (Eval Kazandı) | 35 |
+| **Zero (MAX) vs. Eval (MIN)** | `0` (Beraberlik) | 35 |
+
+### Kısa Değerlendirme
+- **Oyun gücü:** Sezgisel değerlendirme kullanan ajan, `zero_eval` karşısında ilk oyuncu olarak kazanmış, ikinci oyuncu olarak ise yenilmeden berabere kalmıştır (toplam 1.5 / 2 puan).
+- **Düğüm sayısı farkı:** `zero_eval` tüm terminal olmayan yapraklarda aynı değeri (`0.0`) döndürdüğü için eşitlikten dolayı agresif budama yapmaktadır. `evaluate` ise farklı pozisyonel değerler ürettiğinden `P1` ve `P2`'de bir miktar daha fazla düğüm gezmekte (`172 → 293`), ancak buna karşılık taktik olmayan konumlarda çok daha anlamlı hamleler seçmektedir.
