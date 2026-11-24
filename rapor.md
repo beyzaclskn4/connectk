@@ -123,3 +123,36 @@
 ### Kısa Değerlendirme
 - **Oyun gücü:** Sezgisel değerlendirme kullanan ajan, `zero_eval` karşısında ilk oyuncu olarak kazanmış, ikinci oyuncu olarak ise yenilmeden berabere kalmıştır (toplam 1.5 / 2 puan).
 - **Düğüm sayısı farkı:** `zero_eval` tüm terminal olmayan yapraklarda aynı değeri (`0.0`) döndürdüğü için eşitlikten dolayı agresif budama yapmaktadır. `evaluate` ise farklı pozisyonel değerler ürettiğinden `P1` ve `P2`'de bir miktar daha fazla düğüm gezmekte (`172 → 293`), ancak buna karşılık taktik olmayan konumlarda çok daha anlamlı hamleler seçmektedir.
+
+---
+
+## Aşama 4 — İteratif Derinleştirme, Zaman Sınırı ve Geçiş Tablosu (TT)
+
+### Tasarım Özeti
+- **İteratif Derinleştirme (`IterativeDeepeningSearcher`):** Derinlik $d = 1, 2, 3, \dots$ şeklinde kademeli artırılarak arama yapılır. Belirlenen zaman sınırı dolduğunda (`SearchTimeout`), yarıda kalan derinlik atılır ve en son **tamamlanan** derinliğin en iyi hamlesi güvenli şekilde döndürülür.
+- **PV ve TT Hamle Önceliği:** Önceki derinlikte veya Geçiş Tablosunda (*Transposition Table*) en iyi seçilen hamle bir sonraki derinlikte ilk sırada denenerek budama verimliliği artırılır.
+- **Erken Sonlanma:** Kök düğümde kesin kazanma (`+1.0` veya `-1.0`) bulunduğu anda daha derine inmeden arama sonlandırılır.
+- **Birim Testleri (`tests/test_search.py`):** Zaman sınırı uyumu, sabit derinlikte TT–Alpha-Beta değer eşitliği, TT isabet (*hit*) kontrolü ve tek hamlede kazanmada erken durma testleri başarıyla (`OK`) geçmiştir.
+
+### Geçiş Tablosu (TT) Karşılaştırması (`max_depth=5`, `heuristic` sıralama)
+
+| Konum | TT Kapalı (`d` / Düğüm / Süre) | TT Açık (`d` / Düğüm / TT Hit / Süre) | Düğüm Azalması |
+| :--- | :---: | :---: | :---: |
+| **P1** | `5` / `1.612` / `0.679s` | `5` / `1.453` / `62` / `0.239s` | %9.86 |
+| **P2** | `5` / `1.375` / `0.208s` | `5` / `936` / `26` / `0.141s` | %31.93 |
+| **P3** | `1` / `7` / `0.001s` | `1` / `7` / `0` / `0.001s` | Erken sonlanma |
+| **P4** | `5` / `411` / `0.064s` | `5` / `375` / `5` / `0.083s` | %8.76 |
+| **P5** | `1` / `7` / `0.001s` | `1` / `7` / `0` / `0.005s` | Erken sonlanma |
+
+### Zaman Sınırı Ölçümleri (`P2` Konumu, `TT=True`)
+
+| Zaman Sınırı | Tamamlanan Derinlik ($d$) | Seçilen Hamle | Skor | Düğüm | TT Hit | Gerçekleşen Süre |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `0.1s` | 4 | 2 | `+0.000` | 384 | 9 | `0.127s` |
+| `0.5s` | 5 | 2 | `+0.110` | 1.920 | 104 | `0.510s` |
+| `1.0s` | 6 | 3 | `-0.068` | 5.248 | 304 | `1.003s` |
+
+### Kısa Değerlendirme
+- **TT verimliliği:** Aynı tahta durumlarına farklı hamle sıralarıyla ulaşıldığında TT yeniden aramayı engellemiş; `P2`'de düğüm sayısını **%31,93** azaltmış, `P1`'de ise çalışma süresini `0.679s`'den `0.239s`'ye indirmiştir.
+- **Zaman yönetimi ve derinlik artışı:** Süre bütçesi arttıkça ajan düzenli olarak daha derine inmiştir (`0.1s → d=4`, `0.5s → d=5`, `1.0s → d=6`). Derinlik 6'da artan TT isabet sayısı (`304`) derinleştikçe tablonun katkısının büyüdüğünü göstermektedir.
+- **Erken kazanma tespiti:** `P3` ve `P5` konumlarında tek hamlede kazanma bulunduğu için arama $d=1$'de sadece 7 düğüm gezerek anında tamamlanmıştır.
