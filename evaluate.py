@@ -1,5 +1,6 @@
 from typing import Iterator, List
 from game import Game, MAX, MIN, State
+import math
 
 # Tek bir K-uzunluklu penceredeki taş sayısına göre temel ağırlıklar
 WINDOW_WEIGHTS = {
@@ -57,3 +58,42 @@ def score_window(window: List[int]) -> float:
     if min_count > 0:
         return -WINDOW_WEIGHTS.get(min_count, 500.0)
     return 0.0
+
+def center_control_score(game: Game, state: State) -> float:
+    """Merkez sütuna yakın taşlar için küçük pozisyonel bonus hesaplar."""
+    center = (game.C - 1) / 2.0
+    score = 0.0
+    for r in range(game.R):
+        for c in range(game.C):
+            cell = state.board[r][c]
+            if cell == 0:
+                continue
+            # Merkezde en yüksek, kenarlara gittikçe azalan ağırlık
+            weight = max(0.0, (center + 1.0) - abs(c - center))
+            if cell == MAX:
+                score += weight
+            elif cell == MIN:
+                score -= weight
+    return score
+
+
+def evaluate(game: Game, state: State) -> float:
+    """
+    Durumu MAX açısından (-1.0, +1.0) aralığında değerlendirir.
+    Terminal durumlarda doğrudan kesin fayda (-1, 0, +1) döndürür.
+    """
+    if game.is_terminal(state):
+        return float(game.utility(state))
+
+    raw_score = 0.0
+    for window in _iter_windows(game, state):
+        raw_score += score_window(window)
+
+    raw_score += center_control_score(game, state)
+
+    # Misère (V=2) varyantında taş dizmek dezavantajdır
+    if game.V == 2:
+        raw_score = -raw_score
+
+    # Terminal değerleri (±1.0) asla aşmamak için (-0.95, +0.95) aralığına sıkıştır
+    return 0.95 * math.tanh(raw_score / 250.0)
