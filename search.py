@@ -1,6 +1,6 @@
 import math
 from typing import Callable, Optional, Tuple
-from game import Game, MAX, State
+from game import Game, MAX, MIN, State
 import time
 
 
@@ -187,20 +187,32 @@ class SearchTimeout(Exception):
     pass
 
 
+TT_EXACT = 0
+TT_LOWER = 1
+TT_UPPER = 2
+
+
 class IterativeDeepeningSearcher:
     def __init__(
         self,
         game: Game,
         eval_fn: Callable[[Game, State], float] = zero_eval,
         ordering: str = "heuristic",
+        use_tt: bool = True,
     ):
         self.game = game
         self.eval_fn = eval_fn
         self.ordering = ordering
+        self.use_tt = use_tt
         self.nodes = 0
         self.pruned = 0
+        self.tt_hits = 0
         self.completed_depth = 0
         self.last_elapsed = 0.0
+        self.tt: dict = {}
+
+    def _state_key(self, state: State):
+        return (tuple(tuple(row) for row in state.board), state.player)
 
     def _order_actions(
         self, state: State, actions: list[int], pv_move: Optional[int] = None
@@ -220,7 +232,7 @@ class IterativeDeepeningSearcher:
 
             ordered = sorted(actions, key=score)
 
-        # Önceki derinliğin en iyi hamlesini (PV) en başa al
+        # Önceki derinliğin veya TT'nin en iyi hamlesini (PV) en başa al
         if pv_move is not None and pv_move in ordered:
             ordered.remove(pv_move)
             ordered.insert(0, pv_move)
@@ -237,19 +249,51 @@ class IterativeDeepeningSearcher:
         self.nodes += 1
         self._check_time(deadline)
 
+        alpha_orig = alpha
+        key = self._state_key(state) if self.use_tt else None
+        tt_move = None
+
+        if self.use_tt and key in self.tt:
+            tt_depth, tt_flag, tt_val, tt_move = self.tt[key]
+            if tt_depth >= depth:
+                self.tt_hits += 1
+                if tt_flag == TT_EXACT:
+                    return tt_val
+                elif tt_flag == TT_LOWER:
+                    alpha = max(alpha, tt_val)
+                elif tt_flag == TT_UPPER:
+                    beta = min(beta, tt_val)
+                if alpha >= beta:
+                    return tt_val
+
         if self.game.is_terminal(state):
             return float(self.game.utility(state))
         if depth == 0:
             return self.eval_fn(self.game, state)
 
         v = -math.inf
-        actions = self._order_actions(state, self.game.actions(state))
+        best_action = None
+        actions = self._order_actions(state, self.game.actions(state), pv_move=tt_move)
+
         for i, a in enumerate(actions):
-            v = max(v, self._min_value(self.game.result(state, a), depth - 1, alpha, beta, deadline))
+            val = self._min_value(self.game.result(state, a), depth - 1, alpha, beta, deadline)
+            if val > v:
+                v = val
+                best_action = a
             if v >= beta:
                 self.pruned += len(actions) - i - 1
-                return v
+                break
             alpha = max(alpha, v)
+
+        if self.use_tt:
+            if v <= alpha_orig:
+                flag = TT_UPPER
+            elif v >= beta:
+                flag = TT_LOWER
+            else:
+                flag = TT_EXACT
+            self.tt[key] = (depth, flag, v, best_action)
+
         return v
 
     def _min_value(
@@ -258,19 +302,51 @@ class IterativeDeepeningSearcher:
         self.nodes += 1
         self._check_time(deadline)
 
+        beta_orig = beta
+        key = self._state_key(state) if self.use_tt else None
+        tt_move = None
+
+        if self.use_tt and key in self.tt:
+            tt_depth, tt_flag, tt_val, tt_move = self.tt[key]
+            if tt_depth >= depth:
+                self.tt_hits += 1
+                if tt_flag == TT_EXACT:
+                    return tt_val
+                elif tt_flag == TT_LOWER:
+                    alpha = max(alpha, tt_val)
+                elif tt_flag == TT_UPPER:
+                    beta = min(beta, tt_val)
+                if alpha >= beta:
+                    return tt_val
+
         if self.game.is_terminal(state):
             return float(self.game.utility(state))
         if depth == 0:
             return self.eval_fn(self.game, state)
 
         v = math.inf
-        actions = self._order_actions(state, self.game.actions(state))
+        best_action = None
+        actions = self._order_actions(state, self.game.actions(state), pv_move=tt_move)
+
         for i, a in enumerate(actions):
-            v = min(v, self._max_value(self.game.result(state, a), depth - 1, alpha, beta, deadline))
+            val = self._max_value(self.game.result(state, a), depth - 1, alpha, beta, deadline)
+            if val < v:
+                v = val
+                best_action = a
             if v <= alpha:
                 self.pruned += len(actions) - i - 1
-                return v
+                break
             beta = min(beta, v)
+
+        if self.use_tt:
+            if v >= beta_orig:
+                flag = TT_LOWER
+            elif v <= alpha:
+                flag = TT_UPPER
+            else:
+                flag = TT_EXACT
+            self.tt[key] = (depth, flag, v, best_action)
+
         return v
 
     def choose_move(
@@ -282,7 +358,9 @@ class IterativeDeepeningSearcher:
 
         self.nodes = 0
         self.pruned = 0
+        self.tt_hits = 0
         self.completed_depth = 0
+        self.tt.clear()
 
         legal = self.game.actions(state)
         if not legal:
