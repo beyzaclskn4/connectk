@@ -75,7 +75,7 @@ class MinimaxSearcher:
         return self.nodes ** (1.0 / depth)
     
     class AlphaBetaSearcher:
-    def __init__(
+     def __init__(
         self,
         game: Game,
         eval_fn: Callable[[Game, State], float] = zero_eval,
@@ -88,9 +88,28 @@ class MinimaxSearcher:
         self.pruned = 0
 
     def _order_actions(self, state: State, actions: list[int]) -> list[int]:
-        """Varsayılan olarak merkeze en yakın sütunları önce dener."""
+        """Hamleleri seçilen stratejiye göre sıralar: natural, center veya heuristic."""
+        if self.ordering == "natural":
+            return list(actions)
+
         center = (self.game.C - 1) / 2.0
-        return sorted(actions, key=lambda c: (abs(c - center), c))
+        if self.ordering == "center":
+            return sorted(actions, key=lambda c: (abs(c - center), c))
+
+        if self.ordering == "heuristic":
+            def score(action: int) -> tuple[float, float, int]:
+                nxt = self.game.result(state, action)
+                if self.game.is_terminal(nxt):
+                    val = float(self.game.utility(nxt))
+                else:
+                    val = self.eval_fn(self.game, nxt)
+                # MAX yüksek değeri, MIN düşük değeri önce dener
+                primary = -val if state.player == MAX else val
+                return (primary, abs(action - center), action)
+
+            return sorted(actions, key=score)
+
+        raise ValueError(f"Bilinmeyen sıralama stratejisi: {self.ordering}")
 
     def max_value(self, state: State, depth: int, alpha: float, beta: float) -> float:
         self.nodes += 1
