@@ -62,3 +62,33 @@
 - **Taktik doğruluk:** Minimax, `P3`'te dikey kazanmayı (`0`), `P4`'te rakibin kazanmasını engellemeyi (`1`) ve `P5`'te silindir kenar sarma kazanmasını (`4`) tüm derinliklerde doğru seçmiştir.
 - **Düğüm büyümesi:** Budama olmadığı için boş tahtada (`P1`) düğüm sayısı her derinlikte yaklaşık $C = 7$ kat büyümekte, $d=6$'da 137 bin düğüme ulaşmaktadır.
 - **Erken sonlanma etkisi:** `P3`, `P4` ve `P5` konumlarında kazanma durumlarına erken ulaşıldığı için terminal düğümler alt ağaçları kesmekte ve $b_{\text{etkin}}$ değeri `6.55–6.68` bandına düşmektedir.
+
+---
+
+## Aşama 2 — Alpha-Beta Budaması ve Hamle Sıralaması
+
+### Tasarım Özeti
+- **Budama Mantığı (`AlphaBetaSearcher`):** `search.py` içine $\alpha$ (MAX alt sınırı) ve $\beta$ (MIN üst sınırı) takip edilerek `v >= beta` (MAX) ve `v <= alpha` (MIN) durumlarında dalları kesen özyinelemeli arama eklenmiştir.
+- **Hamle Sıralama Stratejileri:** Budama verimliliğini ölçmek için üç strateji uygulanmıştır:
+  1. `natural`: Sütunları soldan sağa (`0..6`) sırayla dener.
+  2. `center`: Merkeze en yakın sütunları önce dener (`3, 2, 4, 1, 5, 0, 6`).
+  3. `heuristic`: Bir sonraki durumun terminal/sezgisel değerine göre en umut verici hamleyi önce dener (eşitlikte merkez öncelikli).
+- **Doğrulama (`tests/test_search.py`):** 50 rastgele konumda $\alpha$-$\beta$'nın Minimax ile birebir aynı değeri ürettiği ve üç sıralama stratejisinin de doğru budama yaptığı birim testleriyle doğrulanmıştır (toplam 11/11 test `OK`).
+
+### Minimax vs. Alpha-Beta Düğüm Karşılaştırması (Derinlik 4 ve 6)
+
+| Konum | Derinlik ($d$) | Minimax (`MM`) | AB (`natural`) | AB (`center`) | AB (`heuristic`) | En İyi Azalma (%) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **P1** | 6 | 137.249 | 1.247 | 1.247 | 1.247 | %99.09 |
+| **P2** | 4 | 2.798 | 172 | 171 | 171 | %93.89 |
+| **P2** | 6 | 130.993 | 2.473 | 2.636 | 1.930 | %98.53 |
+| **P3** | 4 | 2.041 | 85 | 449 | 91 | %95.84 |
+| **P3** | 6 | 78.677 | 495 | 9.521 | 557 | %99.37 |
+| **P4** | 4 | 2.217 | 212 | 422 | 125 | %94.36 |
+| **P4** | 6 | 84.785 | 1.595 | 4.943 | 759 | %99.10 |
+| **P5** | 4 | 2.125 | 328 | 178 | 89 | %95.81 |
+| **P5** | 6 | 88.904 | 4.568 | 864 | 199 | %99.78 |
+
+### Kısa Değerlendirme
+- **Budama kazanımı:** Derinlik 6'da $\alpha$-$\beta$ budaması, Minimax'e kıyasla ziyaret edilen düğüm sayısını tüm konumlarda **%98,5 ile %99,78** arasında azaltmıştır.
+- **Hamle sıralamasının etkisi:** `P3` konumunda kazan
