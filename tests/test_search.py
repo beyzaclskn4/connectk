@@ -1,7 +1,7 @@
 import unittest
 from game import Game, MAX, MIN
 from search import MinimaxSearcher
-
+from search import AlphaBetaSearcher
 
 class TestStage1Minimax(unittest.TestCase):
     def setUp(self):
